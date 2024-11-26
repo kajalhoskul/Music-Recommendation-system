@@ -1,0 +1,106 @@
+import cv2
+import argparse
+import time
+import os
+import Update_Model
+import glob
+import random
+import eel
+import light
+import winsound
+import numpy as np
+
+# Initialize Eel for web integration
+eel.init('WD')
+
+# Define constants
+frequency = 2500  # Set frequency for sound
+duration = 1000   # Set duration for sound
+emotions = ["angry", "happy", "sad", "neutral"]
+
+# Create a FisherFace Recognizer
+fishface = cv2.face.FisherFaceRecognizer_create()
+font = cv2.FONT_HERSHEY_SIMPLEX
+
+# Argument parser for command line options
+parser = argparse.ArgumentParser(description="Options for emotions based music player (Updating the model)")
+parser.add_argument("--update", help="Call for taking new images and retraining the model.", action="store_true")
+args = parser.parse_args()
+
+facedict = {}
+video_capture = cv2.VideoCapture(0)
+facecascade = cv2.CascadeClassifier("haarcascade_frontalface_default.xml")
+
+def display(emotion):
+    condition = True
+    print("Inside function:", emotion)
+    face_cascade = cv2.CascadeClassifier('haarcascade_frontalface_default.xml')
+    color = np.asarray((255, 255, 0)).astype(int).tolist()
+
+    def draw_text(coordinates, image_array, text, color, x_offset=0, y_offset=0, font_scale=2, thickness=2):
+        x, y = coordinates[:2]
+        cv2.putText(image_array, text, (x + x_offset, y + y_offset), cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness, cv2.LINE_AA)
+
+    # Capture frames from a camera
+    cap = cv2.VideoCapture(0)
+
+    # Loop runs if capturing has been initialized
+    while condition:
+        # Read frames from a camera
+        ret, img = cap.read()
+        if not ret:
+            break  # Exit if the frame is not captured
+
+        # Convert to gray scale of each frame
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # Detect faces of different sizes in the input image
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        for (x, y, w, h) in faces:
+            # Draw a rectangle around the face
+            cv2.rectangle(img, (x, y), (x + w, y + h), (255, 255, 0), 2)
+            roi_gray = gray[y:y + h, x:x + w]
+            roi_color = img[y:y + h, x:x + w]
+            draw_text((x, y), img, emotion, color, 0, -45, 1, 1)
+
+        # Display an image in a window
+        cv2.imshow('img', img)
+
+        # Wait for Esc key to stop
+        if cv2.waitKey(1) & 0xFF == 27:  # 27 is the ESC key
+            break
+
+    # Close the window
+    cap.release()
+    cv2.destroyAllWindows()
+    condition = False
+
+if __name__ == "__main__":
+    display("Neutral")  # Default emotion
+
+def crop(clahe_image, face):
+    for (x, y, w, h) in face:
+        faceslice = clahe_image[y:y + h, x:x + w]
+        faceslice = cv2.resize(faceslice, (350, 350))
+        facedict["face%s" % (len(facedict) + 1)] = faceslice
+    return faceslice
+
+def grab_face():
+    ret, frame = light.nolight()
+    cv2.imwrite('test.jpg', frame)
+    gray = cv2.imread('test.jpg', 0)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    clahe_image = clahe.apply(gray)
+    return clahe_image
+
+def detect_face():
+    clahe_image = grab_face()
+    face = facecascade.detectMultiScale(clahe_image, scaleFactor=1.1, minNeighbors=15, minSize=(10, 10), flags=cv2.CASCADE_SCALE_IMAGE)
+    if len(face) >= 1:
+        crop(clahe_image, face)
+    else:
+        print("No/Multiple faces detected!!, passing over the frame")
+
+def save_face(emotion):
+    print(f"\n\nLook {emotion} until the timer expires and keep the same emotion for some time.")
+   
